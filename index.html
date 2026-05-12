@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Caterpillar Garden</title>
+    <style>
+        :root {
+            --bg-garden: #ecfdf5;
+            --primary: #10b981;
+            --secondary: #064e3b;
+            --danger: #f43f5e;
+            --panel: #ffffff;
+            --word-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #d1fae5;
+            font-family: 'Pretendard', 'Segoe UI', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #ui-panel {
+            width: 800px;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel);
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+            border-bottom: 2px solid #f0fdf4;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #6b7280;
+            letter-spacing: 0.1em;
+            font-weight: bold;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            color: var(--secondary);
+            font-weight: 800;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+            border-radius: 0 0 20px 20px;
+            overflow: hidden;
+            background: #fff;
+            border: 10px solid var(--panel);
+        }
+
+        canvas {
+            display: block;
+            background-color: var(--bg-garden);
+        }
+
+        #sentence-display {
+            width: 800px;
+            height: 70px;
+            background: #064e3b;
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            padding: 0 25px;
+            font-size: 22px;
+            font-weight: 700;
+            box-sizing: border-box;
+            margin-top: 15px;
+            border-radius: 15px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+            overflow-x: auto;
+        }
+
+        /* Overlays */
+        .game-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(6, 78, 59, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #start-screen { display: flex; }
+        #game-over-screen { display: none; }
+
+        .btn {
+            padding: 16px 40px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: all 0.2s;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
+        .btn:active { transform: translateY(0); }
+
+        #message-box {
+            position: fixed;
+            top: 30px;
+            padding: 15px 30px;
+            border-radius: 50px;
+            color: white;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+            font-size: 18px;
+        }
+
+        .instructions {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #d1fae5;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="message-box"></div>
+
+    <div id="ui-panel">
+        <div class="stat-box">
+            <div class="stat-label">SCORE</div>
+            <div id="score" class="stat-value">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">GARDEN LIVES</div>
+            <div id="lives" class="stat-value">❤️❤️❤️❤️❤️</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">GROWTH SPEED</div>
+            <div id="speed" class="stat-value">1.0x</div>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- 시작 화면 -->
+        <div id="start-screen" class="game-overlay">
+            <h1 style="font-size: 48px; margin-bottom: 10px;">Word Caterpillar 🍎</h1>
+            <p class="instructions">
+                방향키로 애벌레를 움직여 단어를 먹으세요.<br>
+                <b>주어 + 동사</b> 순서로 먹어야 문장이 완성됩니다.<br>
+                주어의 <b>단수/복수(S/P)</b>와 동사를 꼭 맞춰주세요!<br>
+                문장이 준비되면 <b>[Enter]</b> 키를 눌러 점수를 획득하세요.
+            </p>
+            <button class="btn" onclick="startGame()">GARDEN START</button>
+        </div>
+
+        <!-- 게임 오버 화면 -->
+        <div id="game-over-screen" class="game-overlay">
+            <h1 style="color: #fb7185;">GAME OVER</h1>
+            <p id="final-score" style="font-size: 24px;">Score: 0</p>
+            <button class="btn" onclick="startGame()">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <div id="sentence-display">
+        Caterpillar: [ Feed me some words! ]
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const speedEl = document.getElementById('speed');
+        const sentenceEl = document.getElementById('sentence-display');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const msgBox = document.getElementById('message-box');
+
+        const GRID_SIZE = 25;
+        const width = 800;
+        const height = 500;
+        
+        let gameLoop, spawnTimer;
+        let score = 0, lives = 5, speed = 6;
+        let caterpillar = [], direction = {x: 1, y: 0}, nextDirection = {x: 1, y: 0};
+        let wordsOnBoard = [], currentSentence = [], flyingInsects = [];
+        let isInvulnerable = false;
+        let isGameRunning = false;
+
+        const WORD_DB = {
+            subject: [
+                { text: 'I', number: 'special' }, { text: 'You', number: 'plural' },
+                { text: 'He', number: 'singular' }, { text: 'She', number: 'singular' },
+                { text: 'It', number: 'singular' }, { text: 'We', number: 'plural' },
+                { text: 'They', number: 'plural' }, { text: 'The dog', number: 'singular' },
+                { text: 'The cat', number: 'singular' }, { text: 'The boy', number: 'singular' },
+                { text: 'The girl', number: 'singular' }, { text: 'The teacher', number: 'singular' },
+                { text: 'My mom', number: 'singular' }, { text: 'My friend', number: 'singular' },
+                { text: 'Dogs', number: 'plural' }, { text: 'Cats', number: 'plural' },
+                { text: 'People', number: 'plural' }, { text: 'Teachers', number: 'plural' },
+                { text: 'Friends', number: 'plural' }, { text: 'Students', number: 'plural' },
+                { text: 'Water', number: 'singular' }, { text: 'The sun', number: 'singular' }
+            ],
+            verb: [
+                { text: 'am', number: 'special', subType: 'be' },
+                { text: 'is', number: 'singular', subType: 'be' },
+                { text: 'are', number: 'plural', subType: 'be' },
+                { text: 'was', number: 'singular', subType: 'be' },
+                { text: 'were', number: 'plural', subType: 'be' },
+                { text: 'eats', number: 'singular' }, { text: 'likes', number: 'singular' },
+                { text: 'plays', number: 'singular' }, { text: 'runs', number: 'singular' },
+                { text: 'studies', number: 'singular' }, { text: 'eat', number: 'plural' },
+                { text: 'like', number: 'plural' }, { text: 'play', number: 'plural' },
+                { text: 'run', number: 'plural' }, { text: 'study', number: 'plural' },
+                { text: 'can', number: 'neutral' }, { text: 'will', number: 'neutral' },
+                { text: 'must', number: 'neutral' }, { text: 'feel', number: 'plural' },
+                { text: 'feels', number: 'singular' }
+            ],
+            object: [
+                { text: 'apples' }, { text: 'soccer' }, { text: 'pizza' }, { text: 'music' },
+                { text: 'a book' }, { text: 'the truth' }, { text: 'a song' }, { text: 'lunch' },
+                { text: 'English' }, { text: 'money' }, { text: 'nature' }, { text: 'the car' }
+            ],
+            adjective: [
+                { text: 'happy' }, { text: 'sad' }, { text: 'angry' }, { text: 'tired' },
+                { text: 'smart' }, { text: 'kind' }, { text: 'brave' }, { text: 'great' },
+                { text: 'cute' }, { text: 'strong' }, { text: 'cold' }, { text: 'warm' }
+            ],
+            adverb: [
+                { text: 'quickly' }, { text: 'slowly' }, { text: 'always' }, { text: 'very' },
+                { text: 'really' }, { text: 'now' }, { text: 'well' }, { text: 'hard' }
+            ],
+            conjunction: [
+                { text: 'and' }, { text: 'but' }, { text: 'because' }, { text: 'so' }
+            ],
+            junk: [
+                { text: '???' }, { text: '###' }, { text: '123' }, { text: 'asdf' }
+            ]
+        };
+
+        const INSECTS = ['🦋', '🐝', '🐞', '🦗', '🦟'];
+
+        function init() {
+            canvas.width = width;
+            canvas.height = height;
+            drawInitialBackground();
+        }
+
+        function startGame() {
+            // 초기화 순서 보장
+            score = 0;
+            lives = 5;
+            speed = 6;
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            currentSentence = [];
+            wordsOnBoard = [];
+            flyingInsects = [];
+            caterpillar = [{ x: 16, y: 10 }]; // 시작 위치 설정
+            
+            isGameRunning = true; // 플래그를 변수 설정 후에 켬
+
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            updateUI();
+
+            for(let i=0; i<18; i++) spawnRandomWord();
+            
+            if (gameLoop) clearInterval(gameLoop);
+            if (spawnTimer) clearTimeout(spawnTimer);
+            
+            runGameLoop();
+            runSpawnTimer();
+        }
+
+        function runGameLoop() {
+            gameLoop = setInterval(() => {
+                if (isGameRunning) {
+                    update();
+                    draw();
+                }
+            }, 1000 / speed);
+        }
+
+        function runSpawnTimer() {
+            const tick = () => {
+                if (!isGameRunning) return;
+                if (wordsOnBoard.length < 24) spawnRandomWord();
+                spawnTimer = setTimeout(tick, 1000);
+            };
+            tick();
+        }
+
+        function spawnRandomWord() {
+            const types = Object.keys(WORD_DB);
+            let type = types[Math.floor(Math.random() * types.length)];
+            
+            if (currentSentence.length === 0 && Math.random() > 0.3) type = 'subject';
+            else if (currentSentence.length === 1 && Math.random() > 0.2) type = 'verb';
+
+            const wordData = WORD_DB[type][Math.floor(Math.random() * WORD_DB[type].length)];
+            const word = {
+                ...wordData,
+                type,
+                x: Math.floor(Math.random() * (width / GRID_SIZE)),
+                y: Math.floor(Math.random() * (height / GRID_SIZE)),
+                createdAt: Date.now()
+            };
+
+            const overlap = wordsOnBoard.some(w => w.x === word.x && w.y === word.y) || 
+                            caterpillar.some(s => s.x === word.x && s.y === word.y);
+            if (!overlap) wordsOnBoard.push(word);
+        }
+
+        function update() {
+            // 안전 장치: 애벌레 데이터가 없으면 실행 안 함
+            if (!caterpillar || caterpillar.length === 0) return;
+
+            direction = nextDirection;
+            const head = { x: caterpillar[0].x + direction.x, y: caterpillar[0].y + direction.y };
+
+            let collision = false;
+            let reason = "";
+
+            if (head.x < 0 || head.x >= width/GRID_SIZE || head.y < 0 || head.y >= height/GRID_SIZE) {
+                collision = true;
+                reason = "Wall hit!";
+            } else if (caterpillar.some(s => s.x === head.x && s.y === head.y)) {
+                collision = true;
+                reason = "Tail hit!";
+            }
+
+            if (collision && !isInvulnerable) {
+                handlePenalty(reason);
+                return;
+            }
+
+            // 충돌이 없거나 무적 상태일 때 이동 로직 수행
+            if (!collision) {
+                caterpillar.unshift(head);
+
+                const wIdx = wordsOnBoard.findIndex(w => w.x === head.x && w.y === head.y);
+                if (wIdx !== -1) {
+                    const eaten = wordsOnBoard.splice(wIdx, 1)[0];
+                    if (eaten.type === 'junk') {
+                        handlePenalty("Yuck! Junk word.");
+                        caterpillar.pop();
+                    } else {
+                        currentSentence.push(eaten);
+                        showMessage(`+ ${eaten.text}`, '#10b981');
+                        updateUI();
+                    }
+                } else {
+                    caterpillar.pop();
+                }
+            }
+
+            flyingInsects.forEach(ins => { ins.x += ins.vx; ins.y += ins.vy; ins.angle += 0.1; });
+            flyingInsects = flyingInsects.filter(ins => ins.y > -50);
+            
+            const now = Date.now();
+            wordsOnBoard = wordsOnBoard.filter(w => now - w.createdAt < 25000);
+        }
+
+        function handlePenalty(msg) {
+            lives--;
+            showMessage(msg, '#f43f5e');
+            updateUI();
+            
+            if (lives <= 0) {
+                endGame();
+                return;
+            }
+
+            const centerX = Math.floor((width/GRID_SIZE)/2);
+            const centerY = Math.floor((height/GRID_SIZE)/2);
+            caterpillar = [{ x: centerX, y: centerY }];
+            direction = {x: 1, y: 0};
+            nextDirection = {x: 1, y: 0};
+            currentSentence = [];
+            
+            isInvulnerable = true;
+            setTimeout(() => { isInvulnerable = false; }, 3000);
+        }
+
+        function validateSentence() {
+            if (currentSentence.length < 2) return;
+            
+            const subj = currentSentence.find(w => w.type === 'subject');
+            const verb = currentSentence.find(w => w.type === 'verb');
+            const sIdx = currentSentence.indexOf(subj);
+            const vIdx = currentSentence.indexOf(verb);
+
+            let valid = false;
+            let error = "Need Subject + Verb!";
+
+            if (subj && verb && sIdx < vIdx) {
+                if (verb.number === 'neutral') valid = true;
+                else if (subj.number === 'special') valid = (verb.text === 'am' || verb.text === 'was' || verb.number === 'plural');
+                else if (subj.number === 'singular') valid = (verb.number === 'singular');
+                else if (subj.number === 'plural') valid = (verb.number === 'plural');
+                
+                if (!valid) error = `Agreement Error: ${subj.text} + ${verb.text}`;
+            }
+
+            if (valid) {
+                const bonus = currentSentence.length * 50;
+                score += bonus;
+                showMessage(`PERFECT! +${bonus}`, '#fbbf24');
+                
+                const char = INSECTS[Math.floor(Math.random()*INSECTS.length)];
+                caterpillar.forEach(s => {
+                    flyingInsects.push({
+                        emoji: char, x: s.x * GRID_SIZE, y: s.y * GRID_SIZE,
+                        vx: (Math.random()-0.5)*10, vy: -3-Math.random()*5, angle: 0
+                    });
+                });
+
+                caterpillar = [caterpillar[0]];
+                currentSentence = [];
+                speed = Math.min(15, 6 + score/1000);
+                clearInterval(gameLoop);
+                runGameLoop();
+            } else {
+                handlePenalty(error);
+            }
+            updateUI();
+        }
+
+        function drawInitialBackground() {
+            ctx.fillStyle = '#ecfdf5';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#10b981';
+            ctx.font = '20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("Click START to begin your English journey!", width/2, height/2);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.fillStyle = '#ecfdf5';
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = '#d1fae5';
+            ctx.lineWidth = 1;
+            for(let i=0; i<width; i+=GRID_SIZE*2) {
+                for(let j=0; j<height; j+=GRID_SIZE*2) {
+                    ctx.beginPath();
+                    ctx.arc(i, j, 2, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            }
+
+            wordsOnBoard.forEach(w => {
+                ctx.save();
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetY = 2;
+                ctx.shadowColor = 'rgba(0,0,0,0.1)';
+                
+                let color = '#fff';
+                if(w.type === 'subject') color = '#d1fae5';
+                else if(w.type === 'verb') color = '#fee2e2';
+                else if(w.type === 'object') color = '#dbeafe';
+                else if(w.type === 'adjective') color = '#fef3c7';
+                
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.roundRect(w.x*GRID_SIZE+2, w.y*GRID_SIZE+2, GRID_SIZE-4, GRID_SIZE-4, 8);
+                ctx.fill();
+                
+                ctx.fillStyle = '#064e3b';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(w.text, w.x*GRID_SIZE + GRID_SIZE/2, w.y*GRID_SIZE + GRID_SIZE/2 + 4);
+                
+                if(w.number && w.number !== 'neutral') {
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '7px sans-serif';
+                    ctx.fillText(w.number[0].toUpperCase(), w.x*GRID_SIZE+GRID_SIZE/2, w.y*GRID_SIZE+GRID_SIZE-4);
+                }
+                ctx.restore();
+            });
+
+            caterpillar.forEach((seg, i) => {
+                ctx.save();
+                if (isInvulnerable && Math.floor(Date.now()/200) % 2 === 0) return;
+                
+                const progress = i / (caterpillar.length || 1);
+                ctx.fillStyle = i === 0 ? '#065f46' : `rgb(16, ${185 - progress*60}, 129)`;
+                
+                ctx.beginPath();
+                const radius = i === 0 ? GRID_SIZE/2 - 1 : GRID_SIZE/2 - 3;
+                ctx.arc(seg.x*GRID_SIZE + GRID_SIZE/2, seg.y*GRID_SIZE + GRID_SIZE/2, radius, 0, Math.PI*2);
+                ctx.fill();
+
+                if (i === 0) {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(seg.x*GRID_SIZE + GRID_SIZE/2 + direction.x*6, seg.y*GRID_SIZE + GRID_SIZE/2 + direction.y*6 - 3, 3, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            flyingInsects.forEach(ins => {
+                ctx.save();
+                ctx.font = '24px Arial';
+                ctx.translate(ins.x, ins.y);
+                ctx.rotate(Math.sin(ins.angle)*0.2);
+                ctx.fillText(ins.emoji, 0, 0);
+                ctx.restore();
+            });
+        }
+
+        function updateUI() {
+            scoreEl.textContent = score;
+            livesEl.textContent = '❤️'.repeat(Math.max(0, lives));
+            speedEl.textContent = (speed/6).toFixed(1) + 'x';
+            
+            if (currentSentence.length === 0) {
+                sentenceEl.textContent = "Caterpillar: [ Feed me some words! ]";
+            } else {
+                sentenceEl.innerHTML = "Sentence: " + currentSentence.map(w => {
+                    let c = '#fbbf24';
+                    if(w.type === 'subject') c = '#34d399';
+                    if(w.type === 'verb') c = '#f87171';
+                    return `<span style="color: ${c}">${w.text}</span>`;
+                }).join(' ') + " ...";
+            }
+        }
+
+        function showMessage(text, color) {
+            msgBox.textContent = text;
+            msgBox.style.backgroundColor = color;
+            msgBox.style.display = 'block';
+            msgBox.style.left = (window.innerWidth / 2 - msgBox.offsetWidth / 2) + 'px';
+            setTimeout(() => { msgBox.style.display = 'none'; }, 2000);
+        }
+
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(gameLoop);
+            clearTimeout(spawnTimer);
+            document.getElementById('final-score').textContent = `Total Garden Score: ${score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        window.addEventListener('keydown', e => {
+            if(!isGameRunning) return;
+            switch(e.key) {
+                case 'ArrowUp': if(direction.y !== 1) nextDirection = {x: 0, y: -1}; break;
+                case 'ArrowDown': if(direction.y !== -1) nextDirection = {x: 0, y: 1}; break;
+                case 'ArrowLeft': if(direction.x !== 1) nextDirection = {x: -1, y: 0}; break;
+                case 'ArrowRight': if(direction.x !== -1) nextDirection = {x: 1, y: 0}; break;
+                case 'Enter': validateSentence(); break;
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
